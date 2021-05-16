@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+	"github.com/clambin/upnp-exporter/internal/upnpstats"
+	"github.com/clambin/upnp-exporter/internal/version"
 	"github.com/huin/goupnp"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	log "github.com/sirupsen/logrus"
@@ -10,8 +12,6 @@ import (
 	"os"
 	"path/filepath"
 	"time"
-	"upnp-exporter/internal/upnpstats"
-	"upnp-exporter/internal/version"
 )
 
 var (
