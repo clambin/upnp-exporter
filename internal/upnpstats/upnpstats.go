@@ -6,6 +6,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	log "github.com/sirupsen/logrus"
+	"net/url"
+	"time"
 )
 
 var (
@@ -19,45 +21,73 @@ var (
 	}, []string{"router"})
 )
 
-func DiscoverRouters() (routers []*goupnp.RootDevice, err error) {
+func DiscoverRouterURLs() (urls []*url.URL, err error) {
 	var devices []goupnp.MaybeRootDevice
 
 	devices, err = goupnp.DiscoverDevices("urn:schemas-upnp-org:device:InternetGatewayDevice:1")
 
-	if err == nil {
-		for _, device := range devices {
+	if err != nil {
+		log.WithError(err).Warning("unable to discover router URLS")
+		return
+	}
+
+	for _, device := range devices {
+		if device.Err == nil {
 			log.WithField("device", device.Location.String()).Debug("router found")
-			routers = append(routers, device.Root)
+			urls = append(urls, device.Location)
 		}
-	} else {
-		log.WithError(err).Warning("unable to discover routers")
 	}
 
 	return
 }
 
-func ReportNetworkStats(router *goupnp.RootDevice) {
-	clients, err := internetgateway1.NewWANCommonInterfaceConfig1ClientsFromRootDevice(router, nil)
+func ReportNetworkStats(routerURL *url.URL) {
+	clients, err := internetgateway1.NewWANCommonInterfaceConfig1ClientsByURL(routerURL)
 
-	if err == nil {
-		for _, client := range clients {
-			var packets uint32
+	if err != nil {
+		log.WithError(err).Error("unable to get clients")
+		return
+	}
 
-			packets, err = client.GetTotalPacketsReceived()
+	for _, client := range clients {
+		var packets uint32
 
-			if err == nil {
-				routerPacketsReceived.WithLabelValues(client.RootDevice.URLBase.Host).Set(float64(packets))
-			} else {
-				log.WithError(err).Warning("unable to get number of packets received")
-			}
+		packets, err = client.GetTotalPacketsReceived()
 
-			packets, err = client.GetTotalPacketsSent()
-
-			if err == nil {
-				routerPacketsSent.WithLabelValues(client.RootDevice.URLBase.Host).Set(float64(packets))
-			} else {
-				log.WithError(err).Warning("unable to get number of packets received")
-			}
+		if err == nil {
+			routerPacketsReceived.WithLabelValues(client.RootDevice.URLBase.Host).Set(float64(packets))
+			log.Debugf("packets received: %d", packets)
+		} else {
+			log.WithError(err).Warning("unable to get number of packets received")
 		}
+
+		packets, err = client.GetTotalPacketsSent()
+
+		if err == nil {
+			routerPacketsSent.WithLabelValues(client.RootDevice.URLBase.Host).Set(float64(packets))
+			log.Debugf("packets sent: %d", packets)
+		} else {
+			log.WithError(err).Warning("unable to get number of packets received")
+		}
+	}
+}
+
+func Run(router *url.URL, interval time.Duration) {
+	var routers []*url.URL
+	var err error
+
+	if router != nil {
+		routers = append(routers, router)
+	} else {
+		if routers, err = DiscoverRouterURLs(); err != nil {
+			log.WithField("err", err).Fatal("unable to discover routers. exiting")
+		}
+	}
+
+	for {
+		for _, router := range routers {
+			ReportNetworkStats(router)
+		}
+		time.Sleep(interval)
 	}
 }
