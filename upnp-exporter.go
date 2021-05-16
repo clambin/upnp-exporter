@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"github.com/clambin/upnp-exporter/internal/upnpstats"
 	"github.com/clambin/upnp-exporter/internal/version"
-	"github.com/huin/goupnp"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	log "github.com/sirupsen/logrus"
 	"gopkg.in/alecthomas/kingpin.v2"
@@ -41,15 +40,6 @@ func parseOptions() {
 	}
 }
 
-func scrape(routers []*goupnp.RootDevice) {
-	for {
-		for _, router := range routers {
-			upnpstats.ReportNetworkStats(router)
-		}
-		time.Sleep(Interval)
-	}
-}
-
 func main() {
 	parseOptions()
 
@@ -61,7 +51,14 @@ func main() {
 		log.WithField("err", err).Fatal("unable to discover routers. exiting")
 	}
 
-	go scrape(routers)
+	go func() {
+		for {
+			for _, router := range routers {
+				upnpstats.ReportNetworkStats(router)
+			}
+			time.Sleep(Interval)
+		}
+	}()
 
 	// Run initialized & runs the metrics
 	listenAddress := fmt.Sprintf(":%d", Port)
