@@ -3,22 +3,9 @@ package upnpstats
 import (
 	"github.com/huin/goupnp"
 	"github.com/huin/goupnp/dcps/internetgateway1"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
 	log "github.com/sirupsen/logrus"
 	"net/url"
 	"time"
-)
-
-var (
-	routerPacketsSent = promauto.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "upnp_stats_sent_packets",
-		Help: "Total number of packets sent by the router",
-	}, []string{"router"})
-	routerPacketsReceived = promauto.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "upnp_stats_received_packets",
-		Help: "Total number of packets received by the router",
-	}, []string{"router"})
 )
 
 func DiscoverRouterURLs() (urls []*url.URL, err error) {
@@ -68,6 +55,26 @@ func ReportNetworkStats(routerURL *url.URL) {
 			log.Debugf("packets sent: %d", packets)
 		} else {
 			log.WithError(err).Warning("unable to get number of packets received")
+		}
+
+		var bytes uint64
+
+		bytes, err = client.GetTotalBytesReceived()
+
+		if err == nil {
+			routerBytesReceived.WithLabelValues(client.RootDevice.URLBase.Host).Set(float64(bytes))
+			log.Debugf("bytes received: %d", bytes)
+		} else {
+			log.WithError(err).Warning("unable to get number of bytes received")
+		}
+
+		bytes, err = client.GetTotalBytesSent()
+
+		if err == nil {
+			routerBytesSent.WithLabelValues(client.RootDevice.URLBase.Host).Set(float64(bytes))
+			log.Debugf("bytes sent: %d", bytes)
+		} else {
+			log.WithError(err).Warning("unable to get number of bytes received")
 		}
 	}
 }
