@@ -35,7 +35,7 @@ func parseOptions() {
 	a.Flag("port", "Prometheus listener port").Short('p').Default("8080").IntVar(&Port)
 	a.Flag("interval", "Measurement interval").Short('i').Default("30s").DurationVar(&Interval)
 	a.Flag("url", "Router Service URL").Short('u').StringVar(&urlAsStr)
-	a.Flag("discover", "Discover router URLs and then exist").BoolVar(&Discover)
+	a.Flag("discover", "Discover router URLs and exit").BoolVar(&Discover)
 
 	_, err = a.Parse(os.Args[1:])
 	if err != nil {
@@ -56,16 +56,15 @@ func parseOptions() {
 }
 
 func discoverURLS() {
-	routers, err := upnpstats.DiscoverRouterURLs()
+	routers, err := upnpstats.DiscoverRouters()
 
 	if err != nil {
 		log.WithError(err).Fatal("unable to discover router URLs")
 	}
 
-	for index, router := range routers {
-		fmt.Printf("router %d - %s\n", index+1, router.String())
+	for _, router := range routers {
+		fmt.Printf("router found: %s - %s\n", router.URLBaseStr, router.Device.FriendlyName)
 	}
-
 }
 
 func main() {

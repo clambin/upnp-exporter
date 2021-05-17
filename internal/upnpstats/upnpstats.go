@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-func DiscoverRouterURLs() (urls []*url.URL, err error) {
+func DiscoverRouters() (routers []*goupnp.RootDevice, err error) {
 	var devices []goupnp.MaybeRootDevice
 
 	devices, err = goupnp.DiscoverDevices("urn:schemas-upnp-org:device:InternetGatewayDevice:1")
@@ -21,7 +21,7 @@ func DiscoverRouterURLs() (urls []*url.URL, err error) {
 	for _, device := range devices {
 		if device.Err == nil {
 			log.WithField("device", device.Location.String()).Debug("router found")
-			urls = append(urls, device.Location)
+			routers = append(routers, device.Root)
 		}
 	}
 
@@ -79,21 +79,27 @@ func ReportNetworkStats(routerURL *url.URL) {
 	}
 }
 
-func Run(router *url.URL, interval time.Duration) {
-	var routers []*url.URL
+func Run(routerURL *url.URL, interval time.Duration) {
+	var routerURLs []url.URL
 	var err error
 
-	if router != nil {
-		routers = append(routers, router)
+	if routerURL != nil {
+		routerURLs = append(routerURLs, *routerURL)
 	} else {
-		if routers, err = DiscoverRouterURLs(); err != nil {
+		var routers []*goupnp.RootDevice
+
+		if routers, err = DiscoverRouters(); err != nil {
 			log.WithField("err", err).Fatal("unable to discover routers. exiting")
+		}
+
+		for _, router := range routers {
+			routerURLs = append(routerURLs, router.URLBase)
 		}
 	}
 
 	for {
-		for _, router := range routers {
-			ReportNetworkStats(router)
+		for _, router := range routerURLs {
+			ReportNetworkStats(&router)
 		}
 		time.Sleep(interval)
 	}
