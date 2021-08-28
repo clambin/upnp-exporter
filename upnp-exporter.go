@@ -1,11 +1,13 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"github.com/clambin/upnp-exporter/internal/upnpstats"
 	"github.com/clambin/upnp-exporter/internal/version"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	log "github.com/sirupsen/logrus"
+	"github.com/xonvanetta/shutdown/pkg/shutdown"
 	"gopkg.in/alecthomas/kingpin.v2"
 	"net/http"
 	"net/url"
@@ -80,8 +82,27 @@ func main() {
 	go upnpstats.Run(URL, Interval)
 
 	// Run initialized & runs the metrics
-	listenAddress := fmt.Sprintf(":%d", Port)
-	http.Handle("/metrics", promhttp.Handler())
-	err := http.ListenAndServe(listenAddress, nil)
-	log.WithError(err).Fatal("Failed to start Prometheus http handler")
+	mux := http.NewServeMux()
+	mux.Handle("/metrics", promhttp.Handler())
+	server := http.Server{
+		Addr:    fmt.Sprintf(":%d", Port),
+		Handler: mux,
+	}
+
+	go func() {
+		err := server.ListenAndServe()
+		if err != nil && err != http.ErrServerClosed {
+			log.WithError(err).Fatal("Failed to start Prometheus http handler")
+		}
+	}()
+
+	<-shutdown.Chan()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
+	defer cancel()
+	err := server.Shutdown(ctx)
+	if err != nil {
+		log.WithError(err).Fatal("failed to do graceful shutdown for given time")
+	}
+	log.Info("upnp-exporter stopped")
+
 }
