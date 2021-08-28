@@ -104,5 +104,4 @@ func main() {
 		log.WithError(err).Fatal("failed to do graceful shutdown for given time")
 	}
 	log.Info("upnp-exporter stopped")
-
 }
