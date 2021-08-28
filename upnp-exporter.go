@@ -1,13 +1,12 @@
 package main
 
 import (
-	"context"
 	"fmt"
+	"github.com/clambin/gotools/metrics"
 	"github.com/clambin/upnp-exporter/collector"
 	"github.com/clambin/upnp-exporter/upnpstats"
 	"github.com/clambin/upnp-exporter/version"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	log "github.com/sirupsen/logrus"
 	"github.com/xonvanetta/shutdown/pkg/shutdown"
 	"gopkg.in/alecthomas/kingpin.v2"
@@ -77,24 +76,16 @@ func main() {
 	prometheus.MustRegister(c)
 
 	// Run initialized & runs the metrics
-	mux := http.NewServeMux()
-	mux.Handle("/metrics", promhttp.Handler())
-	server := http.Server{
-		Addr:    fmt.Sprintf(":%d", Port),
-		Handler: mux,
-	}
-
+	server := metrics.NewServer(Port)
 	go func() {
-		err2 := server.ListenAndServe()
+		err2 := server.Run()
 		if err2 != nil && err2 != http.ErrServerClosed {
 			log.WithError(err2).Fatal("Failed to start Prometheus http handler")
 		}
 	}()
 
 	<-shutdown.Chan()
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
-	defer cancel()
-	err = server.Shutdown(ctx)
+	err = server.Shutdown(30 * time.Second)
 	if err != nil {
 		log.WithError(err).Fatal("failed to do graceful shutdown for given time")
 	}
