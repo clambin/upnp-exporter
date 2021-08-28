@@ -61,7 +61,7 @@ func TestCollector_Collect(t *testing.T) {
 	for _, testCase := range testCases {
 		m := <-ch
 		assert.Equal(t, testCase.metricName, metrics.MetricName(m))
-		assert.Equal(t, testCase.metricValue, metrics.MetricValue(m).GetGauge().GetValue())
+		assert.Equal(t, testCase.metricValue, metrics.MetricValue(m).GetCounter().GetValue())
 		assert.Equal(t, router, metrics.MetricLabel(m, "router"))
 	}
 }

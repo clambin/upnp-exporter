@@ -57,9 +57,9 @@ func (c *Collector) Collect(ch chan<- prometheus.Metric) {
 
 	for _, routerStats := range stats {
 		router := routerStats.RouterURL
-		ch <- prometheus.MustNewConstMetric(c.packetsSent, prometheus.GaugeValue, float64(routerStats.PacketsSent), router)
-		ch <- prometheus.MustNewConstMetric(c.packetsReceived, prometheus.GaugeValue, float64(routerStats.PacketsReceived), router)
-		ch <- prometheus.MustNewConstMetric(c.bytesSent, prometheus.GaugeValue, float64(routerStats.BytesSent), router)
-		ch <- prometheus.MustNewConstMetric(c.bytesReceived, prometheus.GaugeValue, float64(routerStats.BytesReceived), router)
+		ch <- prometheus.MustNewConstMetric(c.packetsSent, prometheus.CounterValue, float64(routerStats.PacketsSent), router)
+		ch <- prometheus.MustNewConstMetric(c.packetsReceived, prometheus.CounterValue, float64(routerStats.PacketsReceived), router)
+		ch <- prometheus.MustNewConstMetric(c.bytesSent, prometheus.CounterValue, float64(routerStats.BytesSent), router)
+		ch <- prometheus.MustNewConstMetric(c.bytesReceived, prometheus.CounterValue, float64(routerStats.BytesReceived), router)
 	}
 }
