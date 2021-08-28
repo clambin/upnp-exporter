@@ -15,6 +15,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 var (
@@ -84,16 +85,16 @@ func main() {
 	}
 
 	go func() {
-		err := server.ListenAndServe()
-		if err != nil && err != http.ErrServerClosed {
-			log.WithError(err).Fatal("Failed to start Prometheus http handler")
+		err2 := server.ListenAndServe()
+		if err2 != nil && err2 != http.ErrServerClosed {
+			log.WithError(err2).Fatal("Failed to start Prometheus http handler")
 		}
 	}()
 
 	<-shutdown.Chan()
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
 	defer cancel()
-	err := server.Shutdown(ctx)
+	err = server.Shutdown(ctx)
 	if err != nil {
 		log.WithError(err).Fatal("failed to do graceful shutdown for given time")
 	}
