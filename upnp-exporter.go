@@ -3,8 +3,10 @@ package main
 import (
 	"context"
 	"fmt"
-	"github.com/clambin/upnp-exporter/internal/upnpstats"
+	"github.com/clambin/upnp-exporter/collector"
 	"github.com/clambin/upnp-exporter/internal/version"
+	"github.com/clambin/upnp-exporter/upnpstats"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	log "github.com/sirupsen/logrus"
 	"github.com/xonvanetta/shutdown/pkg/shutdown"
@@ -13,13 +15,11 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"time"
 )
 
 var (
 	Port     int
 	Debug    bool
-	Interval time.Duration
 	URL      *url.URL
 	Discover bool
 )
@@ -35,7 +35,6 @@ func parseOptions() {
 	a.VersionFlag.Short('v')
 	a.Flag("debug", "Log debug messages").Short('d').BoolVar(&Debug)
 	a.Flag("port", "Prometheus listener port").Short('p').Default("8080").IntVar(&Port)
-	a.Flag("interval", "Measurement interval").Short('i').Default("30s").DurationVar(&Interval)
 	a.Flag("url", "Router Service URL").Short('u').StringVar(&urlAsStr)
 	a.Flag("discover", "Discover router URLs and exit").BoolVar(&Discover)
 
@@ -57,29 +56,24 @@ func parseOptions() {
 	}
 }
 
-func discoverURLS() {
-	routers, err := upnpstats.DiscoverRouters()
-
-	if err != nil {
-		log.WithError(err).Fatal("unable to discover router URLs")
-	}
-
-	for _, router := range routers {
-		fmt.Printf("router found: %s - %s\n", router.URLBaseStr, router.Device.FriendlyName)
-	}
-}
-
 func main() {
 	parseOptions()
 
-	log.WithField("version", version.BuildVersion).Info("upnp-exporter started")
+	scanner, err := upnpstats.New(URL)
+	if err != nil {
+		log.WithError(err).Fatal("unable to create upnp scanner")
+	}
 
 	if Discover {
-		discoverURLS()
+		for index, router := range scanner.Routers() {
+			fmt.Printf("%d: %s\n", index+1, router)
+		}
 		os.Exit(0)
 	}
 
-	go upnpstats.Run(URL, Interval)
+	log.WithField("version", version.BuildVersion).Info("upnp-exporter started")
+	c := collector.New(scanner)
+	prometheus.MustRegister(c)
 
 	// Run initialized & runs the metrics
 	mux := http.NewServeMux()

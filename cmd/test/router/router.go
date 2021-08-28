@@ -2,29 +2,20 @@ package main
 
 import (
 	"fmt"
-	"github.com/clambin/upnp-exporter/internal/upnpstats"
-	"github.com/huin/goupnp/dcps/internetgateway1"
+	"github.com/clambin/upnp-exporter/upnpstats"
 	log "github.com/sirupsen/logrus"
 )
 
 func main() {
-	routers, err := upnpstats.DiscoverRouters()
+	scanner, err := upnpstats.New(nil)
 
 	if err != nil {
 		log.WithError(err).Fatal("unable to discover router(s)")
 	}
 
-	for _, router := range routers {
-		var clients []*internetgateway1.WANCommonInterfaceConfig1
+	stats, err := scanner.ReportNetworkStats()
 
-		clients, err = internetgateway1.NewWANCommonInterfaceConfig1ClientsByURL(&router.URLBase)
-
-		if err != nil {
-			log.WithError(err).Warning("failed to create clients from router URL")
-		}
-
-		for _, client := range clients {
-			fmt.Println(client.GetCommonLinkProperties())
-		}
+	for _, routerStats := range stats {
+		fmt.Println(routerStats)
 	}
 }

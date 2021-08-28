@@ -4,6 +4,7 @@ on:
   push:
     branches-ignore:
       - master
+      - collect
   pull_request_target:
 
 jobs:
