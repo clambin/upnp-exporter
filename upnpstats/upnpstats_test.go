@@ -14,12 +14,14 @@ import (
 
 func TestRouterScanner_ReportNetworkStats(t *testing.T) {
 	scanner, err := upnpstats.New(nil)
-	if err != nil {
-		t.Log("no routers found. Not running test")
-		return
-	}
+	require.NoError(t, err)
+	//	if err != nil {
+	//		t.Log("no routers found. Not running test")
+	//		return
+	//	}
 
-	stats, err := scanner.ReportNetworkStats()
+	var stats []upnpstats.Stats
+	stats, err = scanner.ReportNetworkStats()
 
 	for _, routerStats := range stats {
 		t.Logf("testing router %s", routerStats.RouterURL)
@@ -42,8 +44,8 @@ func TestRouterScanner_Routers(t *testing.T) {
 
 func TestRouterScanner_ReportNetworkStats_Mocked(t *testing.T) {
 	discoverer := &mocks.Discoverer{}
-	scanner := &upnpstats.RouterScanner{
-		Discoverer: discoverer,
+	scanner := &upnpstats.UPNPScanner{
+		UPNPDiscoverer: discoverer,
 	}
 
 	const myURL = "https://127.0.0.1:5000/foo"
@@ -68,7 +70,8 @@ func TestRouterScanner_ReportNetworkStats_Mocked(t *testing.T) {
 			BytesReceived:   40,
 		}, nil).Once()
 
-	stats, err := scanner.ReportNetworkStats()
+	var stats []upnpstats.Stats
+	stats, err = scanner.ReportNetworkStats()
 	require.NoError(t, err)
 	assert.Len(t, stats, 1)
 
@@ -83,8 +86,8 @@ func TestRouterScanner_ReportNetworkStats_Mocked(t *testing.T) {
 
 func TestRouterScanner_ReportNetworkStats_Mocked_Failures(t *testing.T) {
 	discoverer := &mocks.Discoverer{}
-	scanner := &upnpstats.RouterScanner{
-		Discoverer: discoverer,
+	scanner := &upnpstats.UPNPScanner{
+		UPNPDiscoverer: discoverer,
 	}
 
 	discoverer.

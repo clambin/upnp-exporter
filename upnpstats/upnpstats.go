@@ -1,6 +1,7 @@
 package upnpstats
 
 import (
+	"fmt"
 	"github.com/huin/goupnp"
 	"github.com/huin/goupnp/dcps/internetgateway1"
 	log "github.com/sirupsen/logrus"
@@ -14,17 +15,17 @@ type Scanner interface {
 	Routers() (routers []string)
 }
 
-// RouterScanner scans upnp-enabled routers for network statistics
-type RouterScanner struct {
-	Discoverer Discoverer
-	routers    []url.URL
+// UPNPScanner scans upnp-enabled routers for network statistics
+type UPNPScanner struct {
+	UPNPDiscoverer Discoverer
+	routers        []url.URL
 }
 
-// New creates a new RouterScanner.  If router is provided, only that URL will be scanned. Otherwise, New will
+// New creates a new UPNPScanner.  If router is provided, only that URL will be scanned. Otherwise, New will
 // scan the network for compatible routers.
-func New(router *url.URL) (scanner *RouterScanner, err error) {
-	scanner = &RouterScanner{
-		Discoverer: &UPNPDiscoverer{},
+func New(router *url.URL) (scanner *UPNPScanner, err error) {
+	scanner = &UPNPScanner{
+		UPNPDiscoverer: &UPNPDiscoverer{},
 	}
 
 	if router == nil {
@@ -36,16 +37,16 @@ func New(router *url.URL) (scanner *RouterScanner, err error) {
 }
 
 // Discover finds all upnp compatible routers
-func (scanner *RouterScanner) Discover() (err error) {
+func (scanner *UPNPScanner) Discover() (err error) {
 	scanner.routers, err = scanner.discoverRouters()
 	return
 }
 
 // discoverRouters attempts to discover all upnp-compatible routers
-func (scanner *RouterScanner) discoverRouters() (routers []url.URL, err error) {
+func (scanner *UPNPScanner) discoverRouters() (routers []url.URL, err error) {
 	var devices []goupnp.MaybeRootDevice
 
-	devices, err = scanner.Discoverer.DiscoverDevices("urn:schemas-upnp-org:device:InternetGatewayDevice:1")
+	devices, err = scanner.UPNPDiscoverer.DiscoverDevices("urn:schemas-upnp-org:device:InternetGatewayDevice:1")
 
 	if err != nil {
 		log.WithError(err).Warning("unable to discover router URLS")
@@ -72,10 +73,10 @@ type Stats struct {
 }
 
 // ReportNetworkStats scans all routers for updated network statistics
-func (scanner *RouterScanner) ReportNetworkStats() (stats []Stats, err error) {
+func (scanner *UPNPScanner) ReportNetworkStats() (stats []Stats, err error) {
 	for _, router := range scanner.routers {
 		var routerStats Stats
-		routerStats, err = scanner.Discoverer.GetNetworkStats(&router)
+		routerStats, err = scanner.UPNPDiscoverer.GetNetworkStats(&router)
 
 		if err == nil {
 			stats = append(stats, routerStats)
@@ -87,7 +88,7 @@ func (scanner *RouterScanner) ReportNetworkStats() (stats []Stats, err error) {
 }
 
 // Routers returns the list of routers
-func (scanner *RouterScanner) Routers() (routers []string) {
+func (scanner *UPNPScanner) Routers() (routers []string) {
 	for _, r := range scanner.routers {
 		routers = append(routers, r.String())
 	}
@@ -112,32 +113,30 @@ func (discoverer *UPNPDiscoverer) GetNetworkStats(routerURL *url.URL) (stats Sta
 	clients, err := internetgateway1.NewWANCommonInterfaceConfig1ClientsByURL(routerURL)
 
 	if err != nil {
-		log.WithError(err).Error("unable to get clients")
-		return
+		return stats, fmt.Errorf("unable to get clients for %s: %s", routerURL.String(), err)
+	}
+
+	if len(clients) == 0 {
+		return stats, fmt.Errorf("router %s yielded no clients", routerURL.String())
+	}
+
+	if len(clients) > 1 {
+		log.Warningf("router %s yielded %d clients. using the first one", routerURL.String(), len(clients))
 	}
 
 	stats.RouterURL = routerURL.String()
-	for _, client := range clients {
-		stats.PacketsReceived, err = client.GetTotalPacketsReceived()
-		if err != nil {
-			continue
-		}
-
-		stats.PacketsSent, err = client.GetTotalPacketsSent()
-		if err != nil {
-			continue
-		}
-
-		stats.BytesReceived, err = client.GetTotalBytesReceived()
-		if err != nil {
-			continue
-		}
-
-		stats.BytesSent, err = client.GetTotalBytesSent()
-		if err != nil {
-			continue
-		}
+	stats.PacketsReceived, err = clients[0].GetTotalPacketsReceived()
+	if err != nil {
+		return
 	}
-
+	stats.PacketsSent, err = clients[0].GetTotalPacketsSent()
+	if err != nil {
+		return
+	}
+	stats.BytesReceived, err = clients[0].GetTotalBytesReceived()
+	if err != nil {
+		return
+	}
+	stats.BytesSent, err = clients[0].GetTotalBytesSent()
 	return
 }
