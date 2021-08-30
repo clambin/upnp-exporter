@@ -16,18 +16,49 @@ type Scanner interface {
 
 // RouterScanner scans upnp-enabled routers for network statistics
 type RouterScanner struct {
-	routers []url.URL
+	Discoverer Discoverer
+	routers    []url.URL
 }
 
 // New creates a new RouterScanner.  If router is provided, only that URL will be scanned. Otherwise, New will
 // scan the network for compatible routers.
 func New(router *url.URL) (scanner *RouterScanner, err error) {
-	scanner = &RouterScanner{}
+	scanner = &RouterScanner{
+		Discoverer: &UPNPDiscoverer{},
+	}
+
 	if router == nil {
-		err = scanner.discoverRouters()
+		err = scanner.Discover()
 	} else {
 		scanner.routers = []url.URL{*router}
 	}
+	return
+}
+
+// Discover finds all upnp compatible routers
+func (scanner *RouterScanner) Discover() (err error) {
+	scanner.routers, err = scanner.discoverRouters()
+	return
+}
+
+// discoverRouters attempts to discover all upnp-compatible routers
+func (scanner *RouterScanner) discoverRouters() (routers []url.URL, err error) {
+	var devices []goupnp.MaybeRootDevice
+
+	devices, err = scanner.Discoverer.DiscoverDevices("urn:schemas-upnp-org:device:InternetGatewayDevice:1")
+
+	if err != nil {
+		log.WithError(err).Warning("unable to discover router URLS")
+		return
+	}
+
+	for _, device := range devices {
+		if device.Err == nil {
+			log.WithField("device", device.Location.String()).Debug("router found")
+			routers = append(routers, device.Root.URLBase)
+		}
+	}
+
 	return
 }
 
@@ -43,14 +74,14 @@ type Stats struct {
 // ReportNetworkStats scans all routers for updated network statistics
 func (scanner *RouterScanner) ReportNetworkStats() (stats []Stats, err error) {
 	for _, router := range scanner.routers {
-		routerStats := Stats{RouterURL: router.String()}
-		routerStats.PacketsSent, routerStats.PacketsReceived, routerStats.BytesSent, routerStats.BytesReceived, err = reportNetworkStats(&router)
+		var routerStats Stats
+		routerStats, err = scanner.Discoverer.GetNetworkStats(&router)
 
-		if err != nil {
+		if err == nil {
+			stats = append(stats, routerStats)
+		} else {
 			log.WithError(err).Warningf("failed to retrieve stats for %s", router.String())
-			continue
 		}
-		stats = append(stats, routerStats)
 	}
 	return
 }
@@ -63,28 +94,21 @@ func (scanner *RouterScanner) Routers() (routers []string) {
 	return
 }
 
-// discoverRouters attempts to discover all upnp-compatible routers
-func (scanner *RouterScanner) discoverRouters() (err error) {
-	var devices []goupnp.MaybeRootDevice
-
-	devices, err = goupnp.DiscoverDevices("urn:schemas-upnp-org:device:InternetGatewayDevice:1")
-
-	if err != nil {
-		log.WithError(err).Warning("unable to discover router URLS")
-		return
-	}
-
-	for _, device := range devices {
-		if device.Err == nil {
-			log.WithField("device", device.Location.String()).Debug("router found")
-			scanner.routers = append(scanner.routers, device.Root.URLBase)
-		}
-	}
-
-	return
+// Discoverer interface scans upnp-enabled routers
+//go:generate mockery --name Discoverer
+type Discoverer interface {
+	DiscoverDevices(target string) (devices []goupnp.MaybeRootDevice, err error)
+	GetNetworkStats(router *url.URL) (stats Stats, err error)
 }
 
-func reportNetworkStats(routerURL *url.URL) (packetsSent, packetsReceived uint32, bytesSent, bytesReceived uint64, err error) {
+type UPNPDiscoverer struct {
+}
+
+func (discoverer *UPNPDiscoverer) DiscoverDevices(target string) (devices []goupnp.MaybeRootDevice, err error) {
+	return goupnp.DiscoverDevices(target)
+}
+
+func (discoverer *UPNPDiscoverer) GetNetworkStats(routerURL *url.URL) (stats Stats, err error) {
 	clients, err := internetgateway1.NewWANCommonInterfaceConfig1ClientsByURL(routerURL)
 
 	if err != nil {
@@ -92,23 +116,24 @@ func reportNetworkStats(routerURL *url.URL) (packetsSent, packetsReceived uint32
 		return
 	}
 
+	stats.RouterURL = routerURL.String()
 	for _, client := range clients {
-		packetsReceived, err = client.GetTotalPacketsReceived()
+		stats.PacketsReceived, err = client.GetTotalPacketsReceived()
 		if err != nil {
 			continue
 		}
 
-		packetsSent, err = client.GetTotalPacketsSent()
+		stats.PacketsSent, err = client.GetTotalPacketsSent()
 		if err != nil {
 			continue
 		}
 
-		bytesReceived, err = client.GetTotalBytesReceived()
+		stats.BytesReceived, err = client.GetTotalBytesReceived()
 		if err != nil {
 			continue
 		}
 
-		bytesSent, err = client.GetTotalBytesSent()
+		stats.BytesSent, err = client.GetTotalBytesSent()
 		if err != nil {
 			continue
 		}
