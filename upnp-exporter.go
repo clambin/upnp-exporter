@@ -78,8 +78,7 @@ func main() {
 	// Run initialized & runs the metrics
 	server := metrics.NewServer(Port)
 	go func() {
-		err2 := server.Run()
-		if err2 != nil && err2 != http.ErrServerClosed {
+		if err2 := server.Run(); err2 != http.ErrServerClosed {
 			log.WithError(err2).Fatal("Failed to start Prometheus http handler")
 		}
 	}()
